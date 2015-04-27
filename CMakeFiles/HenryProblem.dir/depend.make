@@ -266,6 +266,7 @@ CMakeFiles/HenryProblem.dir/HenryProblem.cc.o: /opt/deal.II/include/deal.II/nume
 CMakeFiles/HenryProblem.dir/HenryProblem.cc.o: /opt/deal.II/include/deal.II/numerics/data_out.h
 CMakeFiles/HenryProblem.dir/HenryProblem.cc.o: /opt/deal.II/include/deal.II/numerics/data_out_dof_data.h
 CMakeFiles/HenryProblem.dir/HenryProblem.cc.o: /opt/deal.II/include/deal.II/numerics/data_postprocessor.h
+CMakeFiles/HenryProblem.dir/HenryProblem.cc.o: /opt/deal.II/include/deal.II/numerics/matrix_tools.h
 CMakeFiles/HenryProblem.dir/HenryProblem.cc.o: /opt/deal.II/include/deal.II/numerics/solution_transfer.h
 CMakeFiles/HenryProblem.dir/HenryProblem.cc.o: /opt/deal.II/include/deal.II/numerics/vector_tools.h
 CMakeFiles/HenryProblem.dir/HenryProblem.cc.o: /opt/p4est/FAST/include/p4est.h

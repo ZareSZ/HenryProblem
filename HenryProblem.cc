@@ -28,6 +28,7 @@
 #include <deal.II/fe/fe_values.h>
 
 #include <deal.II/numerics/vector_tools.h>
+#include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/solution_transfer.h>
 
@@ -44,6 +45,42 @@
 namespace HenryProblem
 {
   using namespace dealii;
+
+//-------------------------------------------------------------------------------------------------
+
+  template <int dim>
+  class BoundaryValues : public Function<dim>
+  {
+  public:
+    BoundaryValues () : Function<dim>(dim+1) {}
+    virtual double value (const Point<dim>   &p,
+                          const unsigned int  component = 0) const;
+    virtual void vector_value (const Point<dim> &p,
+                               Vector<double>   &value) const;
+  };
+
+  template <int dim>
+  double
+  BoundaryValues<dim>::value (const Point<dim>  &p,
+                              const unsigned int component) const
+  {
+    Assert (component < this->n_components,
+            ExcIndexRange (component, 0, this->n_components));
+    if (component == 0)
+      return 6.6e-5; //Velocity in x-direction (m/s)
+    return 0;
+  }
+
+  template <int dim>
+  void
+  BoundaryValues<dim>::vector_value (const Point<dim> &p,
+                                     Vector<double>   &values) const
+  {
+    for (unsigned int c=0; c<this->n_components; ++c)
+      values(c) = BoundaryValues<dim>::value (p, c);
+  }
+
+//-------------------------------------------------------------------------------------------------
 
 
   template <int dim>
@@ -66,6 +103,8 @@ namespace HenryProblem
     return 0;
   }
 
+//-------------------------------------------------------------------------------------------------
+
 
   template <int dim>
   class PressureBoundaryValues : public Function<dim>
@@ -83,9 +122,10 @@ namespace HenryProblem
   PressureBoundaryValues<dim>::value (const Point<dim>  &p,
                                       const unsigned int /*component*/) const
   {
-    return 1-p[0];
+    return (1-p[1])*10000;
   }
 
+//-------------------------------------------------------------------------------------------------
 
   template <int dim>
   class SaturationBoundaryValues : public Function<dim>
@@ -104,13 +144,13 @@ namespace HenryProblem
   SaturationBoundaryValues<dim>::value (const Point<dim> &p,
                                         const unsigned int /*component*/) const
   {
-    if (p[0] == 0)
+//     if (p[0] == 1)
       return 1;
-    else
-      return 0;
+//     else
+//       return 0.2;
   }
 
-
+//-------------------------------------------------------------------------------------------------
   template <int dim>
   class SaturationInitialValues : public Function<dim>
   {
@@ -143,7 +183,7 @@ namespace HenryProblem
       values(c) = SaturationInitialValues<dim>::value (p,c);
   }
 
-
+//-------------------------------------------------------------------------------------------------
   //Permeability models
 
 
@@ -189,7 +229,7 @@ namespace HenryProblem
     }
   }
 
-
+//-------------------------------------------------------------------------------------------------
   namespace RandomMedium
   {
     template <int dim>
@@ -263,7 +303,8 @@ namespace HenryProblem
     }
   }
 
-  // Constant value k=1e-7 m2 Permeability
+//-------------------------------------------------------------------------------------------------
+  // Permeability Constant value k=1e-7 (m2)
 
     namespace ConstPermeability
     {
@@ -301,6 +342,7 @@ namespace HenryProblem
       }
     }
 
+//-------------------------------------------------------------------------------------------------
   // Physical quantities
 
 
@@ -343,6 +385,7 @@ namespace HenryProblem
   }
 
 
+//-------------------------------------------------------------------------------------------------
   //Helper classes for solvers and preconditioners
 
 
@@ -589,7 +632,7 @@ namespace HenryProblem
 
     time_step (0),
     old_time_step (0),
-    viscosity (0.2),
+    viscosity (1.0), // 0.2
     porosity (0.35), // 1.0
     AOS_threshold (5.0), // 3.0
 
@@ -751,7 +794,7 @@ namespace HenryProblem
   }
 
 
-  //Assembling matrices and preconditioners
+ //Assembling matrices and preconditioners
 
 
   // TwoPhaseFlowProblem<dim>::assemble_darcy_preconditioner
@@ -842,7 +885,7 @@ namespace HenryProblem
   }
 
 
-  //TwoPhaseFlowProblem<dim>::build_darcy_preconditioner
+//TwoPhaseFlowProblem<dim>::build_darcy_preconditioner
 
   template <int dim>
   void
@@ -861,11 +904,12 @@ namespace HenryProblem
   }
 
 
-  //TwoPhaseFlowProblem<dim>::assemble_darcy_system
+//TwoPhaseFlowProblem<dim>::assemble_darcy_system
 
 
   template <int dim>
   void TwoPhaseFlowProblem<dim>::assemble_darcy_system ()
+
   {
     darcy_matrix = 0;
     darcy_rhs    = 0;
@@ -892,6 +936,7 @@ namespace HenryProblem
     FullMatrix<double>   local_matrix (dofs_per_cell, dofs_per_cell);
     Vector<double>       local_rhs (dofs_per_cell);
 
+
     std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
     const PressureRightHandSide<dim>  pressure_right_hand_side;
@@ -901,12 +946,12 @@ namespace HenryProblem
     std::vector<double>               boundary_values (n_face_q_points);
     std::vector<Tensor<2,dim> >       k_inverse_values (n_q_points);
 
-
     std::vector<double>               old_saturation_values (n_q_points);
 
     std::vector<Tensor<1,dim> >       phi_u (dofs_per_cell);
     std::vector<double>               div_phi_u (dofs_per_cell);
     std::vector<double>               phi_p (dofs_per_cell);
+
 
     const FEValuesExtractors::Vector  velocities (0);
     const FEValuesExtractors::Scalar  pressure (dim);
@@ -916,6 +961,7 @@ namespace HenryProblem
     endc = darcy_dof_handler.end();
     typename DoFHandler<dim>::active_cell_iterator
     saturation_cell = saturation_dof_handler.begin_active();
+
 
     for (; cell!=endc; ++cell, ++saturation_cell)
       {
@@ -955,12 +1001,13 @@ namespace HenryProblem
                 local_rhs(i) += (-phi_p[i] * pressure_rhs_values[q])*
                                 darcy_fe_values.JxW(q);
               }
+
           }
 
         for (unsigned int face_no=0;
              face_no<GeometryInfo<dim>::faces_per_cell;
              ++face_no)
-          if (cell->at_boundary(face_no))
+          if (cell->at_boundary(face_no) && cell->face(face_no)->boundary_indicator() == 2)
             {
               darcy_fe_face_values.reinit (cell, face_no);
 
@@ -992,9 +1039,38 @@ namespace HenryProblem
                                                       local_dof_indices,
                                                       darcy_matrix,
                                                       darcy_rhs);
-
       }
+
+
+    // Darcy Inflow (q) Method
+
+
+    ComponentMask velocity_mask = darcy_fe.component_mask(velocities);
+    FEValuesExtractors::Scalar x_comp (0);
+    FEValuesExtractors::Scalar y_comp (1);
+    std::map<types::global_dof_index,double> boundary_values_inflow;
+
+    VectorTools::interpolate_boundary_values (darcy_dof_handler,
+                                          1,
+                                          BoundaryValues<dim>(),
+                                          boundary_values_inflow,
+                                          darcy_fe.component_mask(x_comp));
+    
+    VectorTools::interpolate_boundary_values (darcy_dof_handler,
+                                          0,
+                                          ZeroFunction<dim>(dim+1),
+                                          boundary_values_inflow,
+                                          darcy_fe.component_mask(y_comp));
+
+    MatrixTools::apply_boundary_values (boundary_values_inflow,
+                                         darcy_matrix,
+                                         darcy_solution,
+                                         darcy_rhs,false);
+    
+    
+    
   }
+
 
 
   //TwoPhaseFlowProblem<dim>::assemble_saturation_system
@@ -1094,6 +1170,7 @@ namespace HenryProblem
 
     typename DoFHandler<dim>::active_cell_iterator
     cell = saturation_dof_handler.begin_active(),
+
     endc = saturation_dof_handler.end();
     typename DoFHandler<dim>::active_cell_iterator
     darcy_cell = darcy_dof_handler.begin_active();
@@ -1112,7 +1189,7 @@ namespace HenryProblem
 
         for (unsigned int face_no=0; face_no<GeometryInfo<dim>::faces_per_cell;
              ++face_no)
-          if (cell->at_boundary(face_no))
+          if (cell->at_boundary(face_no) && cell->face(face_no)->boundary_indicator() == 2)
             {
               darcy_fe_face_values.reinit (darcy_cell, face_no);
               saturation_fe_face_values.reinit (cell, face_no);
@@ -1622,8 +1699,8 @@ namespace HenryProblem
   TwoPhaseFlowProblem<dim>::project_back_saturation ()
   {
     for (unsigned int i=0; i<saturation_solution.size(); ++i)
-      if (saturation_solution(i) < 0.2)
-        saturation_solution(i) = 0.2;
+      if (saturation_solution(i) < 0.2) //Changed here from 0.2
+        saturation_solution(i) = 0.2; //Changed here from 0.2
       else if (saturation_solution(i) > 1)
         saturation_solution(i) = 1;
   }
@@ -1830,13 +1907,22 @@ namespace HenryProblem
     const unsigned int initial_refinement     = (dim == 2 ? 0 : 2);
     const unsigned int n_pre_refinement_steps = (dim == 2 ? 0 : 2);
 
+// Grid for a rectangle (HenryProblem)
+    Point<dim> p1(0,0);// x and y coordinate of the point p1
+    Point<dim> p2(2,1);// x and y coordinate of the point p2
 
-    //GridGenerator::hyper_cube (triangulation, 0, 1);
+    GridGenerator::hyper_rectangle (triangulation,p1,p2);
 
-    GridIn<2> gridin; //HenryProblemGrid
-        gridin.attach_triangulation(triangulation);
-        std::ifstream f("HenryProblemGrid.msh");
-        gridin.read_msh(f);
+    triangulation.begin_active()->face(0)->set_boundary_indicator(1);
+    triangulation.begin_active()->face(1)->set_boundary_indicator(2);
+    triangulation.begin_active()->face(2)->set_boundary_indicator(0);
+    triangulation.begin_active()->face(3)->set_boundary_indicator(0);
+    triangulation.refine_global (5);
+
+//    GridIn<2> gridin; //HenryProblemGrid
+//        gridin.attach_triangulation(triangulation);
+//        std::ifstream f("HenryProblemGrid.msh");
+//        gridin.read_msh(f);
 
 
     triangulation.refine_global (initial_refinement);
@@ -1874,7 +1960,7 @@ start_time_iteration:
         if (timestep_number % 100 == 0)
           output_results ();
 
-        if (timestep_number % 2000000000 == 0)
+        if (timestep_number % 200 == 0)
           refine_mesh (initial_refinement,
                        initial_refinement + n_pre_refinement_steps);
 
